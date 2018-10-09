@@ -196,29 +196,81 @@ int writeJPEGfile(char * filename, int quality, JPEGimage_str strjpeg) {
   return 1;
 }
 
-/* Return array of TIFF data */ //fix tiff
-tdata_t readTIFFfile(char* filename) {
-  TinyTIFFReaderFile* tiffr=NULL;
-  tiffr=TinyTIFFReader_open(filename);
-  if (!tiffr) {
-       std::cout<< "ERROR reading (not existent, not accessible or no TIFF file)\n";
-  } else {
-    uint32_t width=TinyTIFFReader_getWidth(tiffr); imtiff.width = width;
-    uint32_t height=TinyTIFFReader_getHeight(tiffr); imtiff.height = height;
-    uint16_t* image=(uint16_t*)calloc(width*height, sizeof(uint16_t));
-    TinyTIFFReader_getSampleData(tiffr, image, 0);
-    imtiff.data = image;
-    TinyTIFFReader_close(tiffr);
+/* Return array of TIFF data */
+uint32* readTIFFfile(char* filename) {
+  TIFF* tif = TIFFOpen(filename, "r");
+  if (tif) {
+    uint32 width, height, row, scanLineSize, bitspersample, photo;
+    tdata_t buf;
+    int sampleperpixel;
+    TIFFGetField(tif, TIFFTAG_IMAGEWIDTH, &width);   imtiff.width = width;
+    TIFFGetField(tif, TIFFTAG_IMAGELENGTH, &height); imtiff.height = height;
+    TIFFGetField(tif, TIFFTAG_SAMPLESPERPIXEL, &sampleperpixel);
+    TIFFGetField(tif, TIFFTAG_BITSPERSAMPLE, &bitspersample);
+    TIFFGetField(tif, TIFFTAG_PHOTOMETRIC, &photo); imtiff.photo = photo;
+      imtiff.bitspersample = bitspersample;
+    scanLineSize = TIFFScanlineSize(tif);
+      imtiff.sampleperpixel = sampleperpixel;
+
+    buf = _TIFFmalloc(scanLineSize);
+
+    uint32* imageMatrix = new uint32[height * width];
+
+    for (uint32 row = 0; row < height; row++) {
+      if (TIFFReadScanline(tif, buf, row, 0) != -1) {
+        memcpy(&imageMatrix[row * width], buf, scanLineSize);
+        cout << imageMatrix[row * width] << endl;
+      } else {
+        std::cout << "ERROR READING SCANLINE" << std::endl;
+        exit(-1);
+      }
+    }
+    imtiff.data = imageMatrix;
+    _TIFFfree(buf);
+    TIFFClose(tif);
   }
   return imtiff.data;
 }
 
 int writeTIFFfile(char* filename, TIFFImage_str strtiff) {
-  TinyTIFFFile* tif=TinyTIFFWriter_open(filename, 8, imtiff.width, imtiff.height);
-  if (tif) {
-    TinyTIFFWriter_writeImage(tif, imtiff.data);
+  TIFF *out = TIFFOpen(filename, "w");
+  if (out) {
+    uint32 imagelength, imagewidth;
+    uint8 * buf;
+    uint32 row, col, n, bitspersample, photo;
+    uint16 config, nsamples;
+
+    imagelength = strtiff.height;
+    imagewidth = strtiff.width;
+    config = PLANARCONFIG_CONTIG;
+    nsamples = strtiff.sampleperpixel;
+    bitspersample = strtiff.bitspersample;
+    photo = strtiff.photo;
+
+    uint32* imageMatrix = new uint32[imagelength*imagewidth];
+    imageMatrix = strtiff.data;
+
+    TIFFSetField(out, TIFFTAG_IMAGELENGTH, imagelength);
+    TIFFSetField(out, TIFFTAG_IMAGEWIDTH, imagewidth);
+    TIFFSetField(out, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
+    TIFFSetField(out, TIFFTAG_SAMPLESPERPIXEL, nsamples);
+  //  TIFFSetField(out, TIFFTAG_COMPRESSION, COMPRESSION_LZW) ;
+    TIFFSetField(out, TIFFTAG_BITSPERSAMPLE, bitspersample) ;
+    //TIFFSetField(out, TIFFTAG_ROWSPERSTRIP, 1);
+  //  TIFFSetField(out, TIFFTAG_ORIENTATION, (int)ORIENTATION_TOPLEFT);
+    TIFFSetField(out, TIFFTAG_PHOTOMETRIC, photo);
+
+    buf = new uint8 [imagewidth*nsamples] ;
+    for (uint32 row = 0; row < imagelength; row++){
+       if (TIFFWriteScanline(out, imageMatrix, row, 0) != 1 )
+       {
+           std::cout << "Unable to write a row." <<std::endl ;
+           break ;
+       }
+     }
+     //_TIFFfree(buf);
+     TIFFClose(out);
   }
-  
   return 0;
 }
 
@@ -234,13 +286,71 @@ void print_array(unsigned char* a) {
   }
 }
 
+int testTIFF(char* filename) {
+  TIFF* tif = TIFFOpen(filename, "r");
+  uint32 width, height, row, scanLineSize, bitspersample, photo, planar;
+  tdata_t buf;
+  int sampleperpixel;
+  uint32* imageMatrix;
+
+  if (tif) {
+    TIFFGetField(tif, TIFFTAG_IMAGEWIDTH, &width);
+    TIFFGetField(tif, TIFFTAG_IMAGELENGTH, &height);
+    TIFFGetField(tif, TIFFTAG_SAMPLESPERPIXEL, &sampleperpixel);
+    TIFFGetField(tif, TIFFTAG_BITSPERSAMPLE, &bitspersample);
+    TIFFGetField(tif, TIFFTAG_PHOTOMETRIC, &photo);
+    TIFFGetField(tif, TIFFTAG_PLANARCONFIG, &planar);
+    scanLineSize = TIFFScanlineSize(tif);
+
+    buf = _TIFFmalloc(scanLineSize);
+
+    imageMatrix = new uint32[height * width];
+
+    for (uint32 row = 0; row < height; row++) {
+      if (TIFFReadScanline(tif, buf, row, 0) != -1) {
+        memcpy(&imageMatrix[row * width], buf, scanLineSize);
+        //cout << imageMatrix[row * width] << endl;
+      } else {
+        std::cout << "ERROR READING SCANLINE" << std::endl;
+        exit(-1);
+      }
+    }
+    _TIFFfree(buf);
+    TIFFClose(tif);
+  }
+
+  TIFF *out = TIFFOpen("test4.tiff", "w");
+  if (out) {
+    TIFFSetField(out, TIFFTAG_IMAGELENGTH, height);
+    TIFFSetField(out, TIFFTAG_IMAGEWIDTH, width);
+    TIFFSetField(out, TIFFTAG_PLANARCONFIG, planar);
+    TIFFSetField(out, TIFFTAG_SAMPLESPERPIXEL, sampleperpixel);
+    TIFFSetField(out, TIFFTAG_BITSPERSAMPLE, bitspersample);
+    TIFFSetField(out, TIFFTAG_PHOTOMETRIC, photo);
+    for (uint32 row = 0; row < height; ++row){
+       if (TIFFWriteScanline(out, imageMatrix, row, 0) != 1 )
+       {
+           std::cout << "Unable to write a row." <<std::endl ;
+           break ;
+       }
+     }
+     //_TIFFfree(buf);
+     TIFFClose(out);
+  }
+  delete imageMatrix;
+  return 0;
+}
+
+/*
 int main() {
   //readJPEGfile("icecream.jpg");
   //writeJPEGfile("test.jpg", 50);
   //readPNGfile("fish.png");
   //writePNGfile("test2.png", impng);
-  readTIFFfile("glow.tiff");
-  writeTIFFfile("test3.tiff", imtiff);
+  //cout << readTIFFfile("glow.tiff") << endl;
+  //writeTIFFfile("test3.tiff", imtiff);
+  //cout << readTIFFfile("test3.tiff") << endl;
+  testTIFF("lena_color.tiff");
 
   return EXIT_SUCCESS;
-}
+}*/

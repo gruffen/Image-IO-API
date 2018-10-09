@@ -9,10 +9,7 @@
 #include <jpeglib.h>
 #include <tiffio.h>
 #include <jerror.h>
-#include "dependencies/tinytiffwriter.h"
-#include "dependencies/tinytiffreader.h"
-#include "dependencies/tinytiffhighrestimer.h"
-
+#include <cstdlib>
 
 using namespace std;
 using std::string;
@@ -32,14 +29,17 @@ struct PNGimage_str {
 struct TIFFImage_str {
   int width, height;
   tstrip_t numberOfStrips;
-  uint16_t* data;
+  uint32 bitspersample, photo;
+  uint32* data;
+  int sampleperpixel;
 } imtiff;
 
 /* Main API functions */
+
 /*
 auto* readImage(char * filename); // Read single image
 auto* readImage(dir); // Read whole directory of images
-auto* writeImage();*/
+auto* writeImage(); */
 
 /* PNG */
 png_bytep* readPNGfile(char* filename);
@@ -50,11 +50,11 @@ unsigned char* readJPEGfile(char * filename);
 int writeJPEGfile(char * filename, int quality);
 
 /* GIF */
-unsigned char* readGIFfile(char * filename);
-int writeGIFfile(char * filename, int quality);
+//unsigned char* readGIFfile(char * filename);
+//int writeGIFfile(char * filename, int quality);
 
 /* TIFF */
-tdata_t readTIFFfile(char* filename);
+uint32* readTIFFfile(char* filename);
 int writeTIFFfile();
 
 /* RAW */
